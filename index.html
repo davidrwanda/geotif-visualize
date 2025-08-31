@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AAGWA Interactive Map - Data Visualization</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet Time Dimension CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-time-dimension@1.1.1/dist/leaflet.timeDimension.control.css" />
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css" />
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        #map {
+            height: 100vh;
+            width: 100vw;
+            z-index: 1;
+        }
+        
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            min-width: 300px;
+        }
+        
+        .control-panel h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .control-group select,
+        .control-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .control-group select:focus,
+        .control-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .file-upload {
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .file-upload:hover {
+            border-color: #764ba2;
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .file-upload.dragover {
+            border-color: #764ba2;
+            background: rgba(102, 126, 234, 0.2);
+        }
+        
+        .status-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            min-width: 200px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        
+        .country-info {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            display: none;
+            max-width: 400px;
+            text-align: center;
+        }
+        
+        .country-info h4 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        
+        .country-info p {
+            margin: 5px 0;
+            color: #666;
+        }
+        
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #999;
+        }
+        
+        .close-btn:hover {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <!-- Control Panel -->
+    <div class="control-panel">
+        <h3>🌍 AAGWA Map Controls</h3>
+        
+        <div class="control-group">
+            <label for="countrySelect">Select Country:</label>
+            <select id="countrySelect">
+                <option value="">Choose a country...</option>
+                <option value="Benin">Benin</option>
+                <option value="Senegal">Senegal</option>
+                <option value="Ghana">Ghana</option>
+                <option value="Malawi">Malawi</option>
+                <option value="Uganda">Uganda</option>
+            </select>
+            <div id="selectedCountryInfo" style="font-size: 12px; color: #667eea; padding: 5px 0; display: none;">
+                <strong>Selected:</strong> <span id="selectedCountryName"></span>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="layerSelect">Map Layer:</label>
+            <select id="layerSelect">
+                <option value="osm">OpenStreetMap</option>
+                <option value="satellite">Satellite</option>
+                <option value="terrain">Terrain</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label for="geotiffFile">Upload GeoTIFF:</label>
+            <div class="file-upload" id="fileUpload">
+                <p>📁 Drag & Drop GeoTIFF file here<br>or click to browse</p>
+                <input type="file" id="geotiffFile" accept=".tif,.tiff" style="display: none;">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>Boundary Source:</label>
+            <div style="font-size: 12px; color: #666; padding: 5px 0;">
+                🌍 Using africa.geojson for accurate country boundaries
+            </div>
+            <div id="boundaryStatus" style="font-size: 11px; color: #28a745; padding: 3px 0;">
+                ✓ Ready to load boundaries
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>TIF Visualization:</label>
+            <div style="font-size: 12px; color: #666; padding: 5px 0;">
+                🌾 Select Senegal to view groundnut production data
+            </div>
+            <div style="font-size: 11px; color: #17a2b8; padding: 3px 0;">
+                💡 Large TIF files automatically use simplified visualization
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="opacitySlider">Opacity:</label>
+            <input type="range" id="opacitySlider" min="0" max="1" step="0.1" value="0.7">
+        </div>
+        
+        <div class="control-group">
+            <button class="btn" id="resetView">Reset View</button>
+            <button class="btn" id="clearSelection">Clear Selection</button>
+            <button class="btn" id="toggleTifData">Show Data</button>
+            <button class="btn" id="refreshVisualization">Refresh</button>
+            <button class="btn" id="debugData">Debug</button>
+            <button class="btn" id="exportData">Export Data</button>
+        </div>
+    </div>
+    
+    <!-- Status Bar -->
+    <div class="status-bar" id="statusBar">
+        Ready to visualize country data...
+    </div>
+    
+    <!-- Legend -->
+    <div class="legend" id="legend" style="display: none;">
+        <h4>Data Legend</h4>
+        <div id="legendContent"></div>
+    </div>
+    
+    <!-- Country Info Modal -->
+    <div class="country-info" id="countryInfo">
+        <button class="close-btn" onclick="closeCountryInfo()">&times;</button>
+        <h4 id="countryName"></h4>
+        <p id="countryPopulation"></p>
+        <p id="countryArea"></p>
+        <p id="countryCapital"></p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-time-dimension@1.1.1/dist/leaflet.timeDimension.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/geotiff@2.0.7/dist/geotiff.bundle.min.js"></script>
+    
+    <!-- Professional TIF visualization libraries -->
+    <script src="https://unpkg.com/georaster"></script>
+    <script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
+    <script src="https://unpkg.com/geoblaze"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chroma-js@2.4.2/chroma.min.js"></script>
+    
+    <!-- Main application script -->
+    <script src="main.js"></script>
+</body>
+</html>
