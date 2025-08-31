@@ -559,6 +559,7 @@ class AfricaBoundariesMap {
                 resolution: 128,
                 opacity: 0.8,
                 mask: countryGeometry, // Use country boundary as mask
+                resampleMethod: "bilinear",
                 pixelValuesToColorFn: (values) => {
                     // Debug: Log more values to see what's being processed
                     if (Math.random() < 0.01) { // Log 1% of values to see more data
