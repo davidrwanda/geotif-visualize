@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Africa Country Boundaries Map</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        #map {
+            height: 100vh;
+            width: 100vw;
+            z-index: 1;
+        }
+        
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            min-width: 300px;
+        }
+        
+        .control-panel h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .control-group select,
+        .control-group input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .control-group select:focus,
+        .control-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s ease;
+            margin: 5px 5px 5px 0;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        
+        .country-info {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            display: none;
+            max-width: 400px;
+            text-align: center;
+        }
+        
+        .country-info h4 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        
+        .country-info p {
+            margin: 5px 0;
+            color: #666;
+        }
+        
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #999;
+        }
+        
+        .close-btn:hover {
+            color: #333;
+        }
+        
+        .boundary-status {
+            font-size: 12px;
+            color: #28a745;
+            padding: 5px 0;
+            font-weight: 600;
+        }
+        
+        .tif-controls {
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+            margin-top: 15px;
+        }
+        
+        .tif-controls h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .tif-url-input {
+            margin-bottom: 10px;
+        }
+        
+        .tif-url-input input {
+            font-size: 12px;
+            padding: 6px 10px;
+        }
+        
+        .visualize-btn {
+            width: 100%;
+            margin: 0;
+        }
+        
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <!-- Control Panel -->
+    <div class="control-panel">
+        <h3>🌍 Africa Country Boundaries</h3>
+        
+        <div class="control-group">
+            <label for="countrySelect">Select Country:</label>
+            <select id="countrySelect">
+                <option value="">Choose a country...</option>
+                <option value="Benin">Benin</option>
+                <option value="Senegal">Senegal</option>
+                <option value="Ghana">Ghana</option>
+                <option value="Malawi">Malawi</option>
+                <option value="Uganda">Uganda</option>
+            </select>
+            <div id="selectedCountryInfo" style="font-size: 12px; color: #667eea; padding: 5px 0; display: none;">
+                <strong>Selected:</strong> <span id="selectedCountryName"></span>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="layerSelect">Map Layer:</label>
+            <select id="layerSelect">
+                <option value="osm">OpenStreetMap</option>
+                <option value="satellite">Satellite</option>
+                <option value="terrain">Terrain</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Boundary Source:</label>
+            <div class="boundary-status" id="boundaryStatus">
+                ✓ Using africa.geojson for accurate country boundaries
+            </div>
+        </div>
+        
+        <!-- TIF Controls -->
+        <div class="tif-controls">
+            <h4>🗺️ TIF Visualization</h4>
+            <div class="tif-url-input">
+                <label for="tifUrlInput">TIF File URL:</label>
+                <input type="url" id="tifUrlInput" placeholder="Enter TIF file URL..." />
+            </div>
+            <button class="btn visualize-btn" id="visualizeBtn" disabled>Visualize TIF</button>
+            <button class="btn" id="debugTifBtn" style="margin-top: 5px; font-size: 12px; padding: 8px 15px;">Debug TIF Data</button>
+        </div>
+        
+        <div class="control-group">
+            <button class="btn" id="resetView">Reset View</button>
+            <button class="btn" id="clearSelection">Clear Selection</button>
+            <button class="btn" id="showAllCountries">Show All Countries</button>
+            <button class="btn" id="clearTif">Clear TIF</button>
+        </div>
+    </div>
+    
+    <!-- Status Bar -->
+    <div class="status-bar" id="statusBar">
+        Loading country boundaries from africa.geojson...
+    </div>
+    
+    <!-- Country Info Modal -->
+    <div class="country-info" id="countryInfo">
+        <button class="close-btn" onclick="closeCountryInfo()">&times;</button>
+        <h4 id="countryName"></h4>
+        <p id="countryPopulation"></p>
+        <p id="countryArea"></p>
+        <p id="countryCapital"></p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/proj4"></script>
+    <script src="https://unpkg.com/georaster"></script>
+    <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
+    
+    <!-- Main application script -->
+    <script>
+        /**
+ * Africa Country Boundaries Map - Main Application
+ * Handles country highlighting, boundary visualization, and TIF file loading using africa.geojson
+ */
+
+class AfricaBoundariesMap {
+    constructor() {
+        this.map = null;
+        this.geojsonLayer = null;
+        this.currentCountry = null;
+        this.countryData = {};
+        this.selectedCountryLayer = null;
+        this.currentTifLayer = null;
+        this.currentLegend = null;
+        
+        // Country-specific TIF URLs
+        this.countryTifUrls = {
+            'Senegal': 'https://www.aagwa.org/customized-aagwa/data/Uganda/Beans/production/2025/Uganda_Beans_production_2025.tif',
+            'Benin': '',
+            'Ghana': '',
+            'Malawi': '',
+            'Uganda': ''
+        };
+        
+        // Initialize the application
+        this.init();
+    }
+
+    /**
+     * Initialize the application
+     */
+    async init() {
+        try {
+            // Initialize the map
+            this.initializeMap();
+            
+            // Load country data
+            await this.loadCountryData();
+            
+            // Setup event listeners
+            this.setupEventListeners();
+            
+            console.log('✅ Africa Boundaries Map initialized successfully!');
+            
+        } catch (error) {
+            console.error('❌ Error initializing Africa Boundaries Map:', error);
+            this.updateStatus('Error initializing map', 'error');
+        }
+    }
+
+    /**
+     * Initialize the Leaflet map
+     */
+    initializeMap() {
+        // Create map centered on Africa
+        this.map = L.map('map').setView([0, 20], 4);
+
+        // Add base tile layers
+        this.tileLayers = {
+            osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }),
+            satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: '© Esri'
+            }),
+            terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenTopoMap'
+            })
+        };
+
+        // Add default layer
+        this.tileLayers.osm.addTo(this.map);
+
+        // Add scale control
+        L.control.scale().addTo(this.map);
+
+        // Add zoom control
+        L.control.zoom({
+            position: 'bottomleft'
+        }).addTo(this.map);
+
+        console.log('🗺️ Map initialized');
+    }
+
+    /**
+     * Load country data and create GeoJSON layer
+     */
+    async loadCountryData() {
+        try {
+            // Sample country data
+            this.countryData = {
+                Benin: {
+                    name: "Benin",
+                    population: "12.5M",
+                    area: "114,763 km²",
+                    capital: "Porto-Novo",
+                    coordinates: [9.145486056167277, 2.1093750000000004],
+                    zoom: 7,
+                    code: "BEN"
+                },
+                Senegal: {
+                    name: "Senegal",
+                    population: "17.2M",
+                    area: "196,722 km²",
+                    capital: "Dakar",
+                    coordinates: [14.392118083661728, -14.787597656250002],
+                    zoom: 7,
+                    code: "SEN"
+                },
+                Ghana: {
+                    name: "Ghana",
+                    population: "32.8M",
+                    area: "238,535 km²",
+                    capital: "Accra",
+                    coordinates: [7.710991655433217, -1.1206054687500002],
+                    zoom: 7,
+                    code: "GHA"
+                },
+                Malawi: {
+                    name: "Malawi",
+                    population: "19.1M",
+                    area: "118,484 km²",
+                    capital: "Lilongwe",
+                    coordinates: [-13.368243250897287, 33.90380859375001],
+                    zoom: 7,
+                    code: "MWI"
+                },
+                Uganda: {
+                    name: "Uganda",
+                    population: "47.1M",
+                    area: "241,550 km²",
+                    capital: "Kampala",
+                    coordinates: [1.142502403706165, 32.95898437500001],
+                    zoom: 7,
+                    code: "UGA"
+                }
+            };
+
+            // Create GeoJSON data for countries
+            const geojsonData = await this.createCountryGeoJSON();
+            
+            // Add GeoJSON layer to map
+            this.geojsonLayer = L.geoJSON(geojsonData, {
+                style: this.styleCountry,
+                onEachFeature: this.onEachCountryFeature.bind(this)
+            }).addTo(this.map);
+
+            console.log('🌍 Country data loaded successfully');
+            console.log('GeoJSON layer created:', this.geojsonLayer);
+            console.log('Number of features:', geojsonData.features.length);
+
+        } catch (error) {
+            console.error('Error loading country data:', error);
+            this.updateStatus('Error loading country data', 'error');
+            this.updateBoundaryStatus('⚠️ Using simplified boundaries', 'warning');
+        }
+    }
+
+    /**
+     * Create GeoJSON data for countries
+     */
+    async createCountryGeoJSON() {
+        try {
+            // Try to fetch actual country boundaries from africa.geojson
+            const countryBoundaries = await this.fetchCountryBoundaries();
+            return countryBoundaries;
+        } catch (error) {
+            console.warn('Could not fetch actual boundaries, using simplified ones:', error);
+            return this.createSimplifiedBoundaries();
+        }
+    }
+
+    /**
+     * Fetch actual country boundaries from africa.geojson
+     */
+    async fetchCountryBoundaries() {
+        try {
+            this.updateBoundaryStatus('🔄 Loading boundaries...', 'info');
+            this.updateStatus('Loading country boundaries from africa.geojson...', 'info');
+            
+            const response = await fetch('./africa.geojson');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            this.updateBoundaryStatus('🔄 Parsing data...', 'info');
+            this.updateStatus('Parsing country boundary data...', 'info');
+            const data = await response.json();
+            
+            // Validate the data structure
+            if (data.type === 'FeatureCollection' && data.features && data.features.length > 0) {
+                console.log(`Successfully loaded ${data.features.length} features from africa.geojson`);
+                
+                this.updateBoundaryStatus('🔄 Processing...', 'info');
+                this.updateStatus('Processing country boundaries...', 'info');
+                
+                // Filter only the countries we need and enhance with country data
+                const filteredFeatures = this.filterAndEnhanceCountries(data.features);
+                
+                this.updateBoundaryStatus(`✓ ${filteredFeatures.length} countries loaded`, 'success');
+                this.updateStatus(`Loaded ${filteredFeatures.length} countries with real boundaries`, 'success');
+                
+                return {
+                    type: "FeatureCollection",
+                    features: filteredFeatures
+                };
+            } else {
+                throw new Error('Invalid GeoJSON structure in africa.geojson file');
+            }
+        } catch (error) {
+            console.error('Error loading africa.geojson:', error);
+            this.updateBoundaryStatus('❌ Load failed', 'error');
+            this.updateStatus(`Failed to load boundaries: ${error.message}`, 'error');
+            throw new Error(`Africa GeoJSON fetch failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Filter and enhance countries with country data
+     */
+    filterAndEnhanceCountries(features) {
+        const supportedCountries = ['Benin', 'Senegal', 'Ghana', 'Malawi', 'Uganda'];
+        const enhancedFeatures = [];
+
+        features.forEach(feature => {
+            const countryName = feature.properties.name;
+            
+            if (supportedCountries.includes(countryName)) {
+                // Get country data for this country
+                const countryInfo = this.countryData[countryName];
+                
+                if (countryInfo) {
+                    // Enhance the feature with country data
+                    const enhancedFeature = {
+                        ...feature,
+                        properties: {
+                            ...feature.properties,
+                            name: countryInfo.name,
+                            population: countryInfo.population,
+                            area: countryInfo.area,
+                            capital: countryInfo.capital,
+                            code: countryInfo.code,
+                            originalName: feature.properties.name,
+                            countryCode: feature.properties.countryCode
+                        }
+                    };
+                    
+                    enhancedFeatures.push(enhancedFeature);
+                    console.log(`Enhanced country: ${countryName} with country data`);
+                }
+            }
+        });
+
+        console.log(`Found and enhanced ${enhancedFeatures.length} countries from africa.geojson`);
+        return enhancedFeatures;
+    }
+
+    /**
+     * Create simplified boundaries as fallback
+     */
+    createSimplifiedBoundaries() {
+        const features = [];
+        
+        Object.keys(this.countryData).forEach(countryName => {
+            const country = this.countryData[countryName];
+            
+            // Create a simple polygon around the country coordinates
+            const feature = {
+                type: "Feature",
+                properties: {
+                    name: country.name,
+                    population: country.population,
+                    area: country.area,
+                    capital: country.capital,
+                    code: country.code
+                },
+                geometry: {
+                    type: "Polygon",
+                    coordinates: [[
+                        [country.coordinates[1] - 2, country.coordinates[0] - 2],
+                        [country.coordinates[1] + 2, country.coordinates[0] - 2],
+                        [country.coordinates[1] + 2, country.coordinates[0] + 2],
+                        [country.coordinates[1] - 2, country.coordinates[0] + 2],
+                        [country.coordinates[1] - 2, country.coordinates[0] - 2]
+                    ]]
+                }
+            };
+            
+            features.push(feature);
+        });
+
+        return {
+            type: "FeatureCollection",
+            features: features
+        };
+    }
+
+    /**
+     * Style for countries
+     */
+    styleCountry(feature) {
+        return {
+            fillColor: 'transparent',
+            weight: 0,
+            opacity: 0,
+            color: 'transparent',
+            fillOpacity: 0
+        };
+    }
+
+    /**
+     * Add features to each country
+     */
+    onEachCountryFeature(feature, layer) {
+        // Add click to select functionality
+        layer.on({
+            click: (e) => this.handleCountryClick(e)
+        });
+
+        // Add popup
+        layer.bindPopup(`
+            <div style="text-align: center;">
+                <h4>${feature.properties.name}</h4>
+                <p><strong>Capital:</strong> ${feature.properties.capital}</p>
+                <p><strong>Population:</strong> ${feature.properties.population}</p>
+                <p><strong>Area:</strong> ${feature.properties.area}</p>
+                <p><em>Click to select this country</em></p>
+            </div>
+        `);
+    }
+
+    /**
+     * Handle country selection on map click
+     */
+    handleCountryClick(e) {
+        if (!e || !e.target) return;
+        
+        const layer = e.target;
+        if (!layer.feature || !layer.feature.properties) return;
+        
+        const countryName = layer.feature.properties.name;
+        if (!countryName) return;
+        
+        // Deselect previously selected country
+        this.deselectAllCountries();
+        
+        // Select the clicked country
+        this.selectCountryOnMap(layer, countryName);
+        
+        // Zoom to the selected country
+        this.zoomToCountry(countryName);
+        
+        // Show country info
+        this.showCountryInfo(layer.feature.properties);
+        
+        // Update dropdown selection
+        this.updateCountryDropdown(countryName);
+        
+        // Update TIF URL input with country-specific default
+        this.updateTifUrlInput(countryName);
+        
+        this.updateStatus(`Selected ${countryName}`, 'success');
+    }
+
+    /**
+     * Select a specific country on the map
+     */
+    selectCountryOnMap(layer, countryName) {
+        if (!layer) return;
+
+        // Highlight the selected country with prominent styling
+        layer.setStyle({
+            weight: 3,
+            color: '#667eea',
+            fillColor: '#667eea',
+            dashArray: '8, 4',
+            fillOpacity: 0.2
+        });
+
+        // Bring the layer to the front
+        if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+            layer.bringToFront();
+        }
+
+        // Add selected class for additional styling
+        if (layer.getElement()) {
+            layer.getElement().classList.add('country-selected');
+        }
+
+        // Store the selected country
+        this.currentCountry = countryName;
+        this.selectedCountryLayer = layer;
+    }
+
+    /**
+     * Deselect all countries
+     */
+    deselectAllCountries() {
+        if (this.selectedCountryLayer && this.geojsonLayer) {
+            // Remove selected class
+            if (this.selectedCountryLayer.getElement()) {
+                this.selectedCountryLayer.getElement().classList.remove('country-selected');
+            }
+            
+            // Reset to completely invisible state
+            this.selectedCountryLayer.setStyle({
+                fillColor: 'transparent',
+                weight: 0,
+                opacity: 0,
+                color: 'transparent',
+                fillOpacity: 0
+            });
+            
+            this.selectedCountryLayer = null;
+        }
+        this.currentCountry = null;
+    }
+
+    /**
+     * Zoom to country
+     */
+    zoomToCountry(countryName) {
+        const country = this.countryData[countryName];
+        
+        if (country && this.geojsonLayer) {
+            // Find the country layer and fit bounds to it
+            this.geojsonLayer.eachLayer((layer) => {
+                if (layer.feature && layer.feature.properties.name === countryName) {
+                    try {
+                        // Get the bounds of the country and fit the map to it
+                        const bounds = layer.getBounds();
+                        this.map.fitBounds(bounds, {
+                            padding: [20, 20], // Add some padding around the country
+                            maxZoom: 8, // Limit maximum zoom to prevent excessive zooming
+                            animate: true
+                        });
+                        this.updateStatus(`Zoomed to ${countryName}`, 'success');
+                    } catch (error) {
+                        // Fallback to fixed coordinates if bounds fail
+                        console.warn(`Could not get bounds for ${countryName}, using fallback:`, error);
+                        this.map.setView(country.coordinates, country.zoom);
+                        this.updateStatus(`Zoomed to ${countryName} (fallback)`, 'info');
+                    }
+                }
+            });
+        } else if (country) {
+            // Fallback to fixed coordinates if GeoJSON layer not ready
+            this.map.setView(country.coordinates, country.zoom);
+            this.updateStatus(`Zoomed to ${countryName} (fallback)`, 'info');
+        }
+    }
+
+    /**
+     * Show country information modal
+     */
+    showCountryInfo(countryProps) {
+        const modal = document.getElementById('countryInfo');
+        const nameEl = document.getElementById('countryName');
+        const populationEl = document.getElementById('countryPopulation');
+        const areaEl = document.getElementById('countryArea');
+        const capitalEl = document.getElementById('countryCapital');
+
+        nameEl.textContent = countryProps.name;
+        populationEl.textContent = `Population: ${countryProps.population}`;
+        areaEl.textContent = `Area: ${countryProps.area}`;
+        capitalEl.textContent = `Capital: ${countryProps.capital}`;
+
+        modal.style.display = 'block';
+    }
+
+    /**
+     * Hide country information modal
+     */
+    hideCountryInfo() {
+        document.getElementById('countryInfo').style.display = 'none';
+    }
+
+    /**
+     * Update TIF URL input with country-specific default
+     */
+    updateTifUrlInput(countryName) {
+        const tifUrlInput = document.getElementById('tifUrlInput');
+        const visualizeBtn = document.getElementById('visualizeBtn');
+        
+        if (tifUrlInput && visualizeBtn) {
+            const defaultUrl = this.countryTifUrls[countryName] || '';
+            tifUrlInput.value = defaultUrl;
+            
+            // Enable visualize button if there's a URL
+            visualizeBtn.disabled = !defaultUrl;
+            
+            // Update placeholder
+            if (defaultUrl) {
+                tifUrlInput.placeholder = `Default TIF for ${countryName}`;
+            } else {
+                tifUrlInput.placeholder = `Enter TIF file URL for ${countryName}...`;
+            }
+        }
+    }
+
+    /**
+     * Load and visualize TIF file
+     */
+    async loadTifFile() {
+        const tifUrlInput = document.getElementById('tifUrlInput');
+        const visualizeBtn = document.getElementById('visualizeBtn');
+        
+        if (!tifUrlInput || !tifUrlInput.value.trim()) {
+            this.updateStatus('Please enter a TIF file URL', 'warning');
+                return;
+            }
+
+        const tifUrl = tifUrlInput.value.trim();
+        
+        try {
+            // Show loading state
+            visualizeBtn.disabled = true;
+            visualizeBtn.textContent = 'Loading...';
+            this.updateStatus('Loading TIF file...', 'info');
+            
+            // Clear any existing TIF layer
+            this.clearCurrentTifLayer();
+            
+            // Parse and load the TIF file
+            const georaster = await parseGeoraster(tifUrl);
+            console.log('Georaster loaded:', georaster);
+            
+            // Debug: Check the data range and statistics
+            if (georaster && georaster.values) {
+                const values = georaster.values[0]; // First band
+                if (values && values.length > 0) {
+                    const min = Math.min(...values);
+                    const max = Math.max(...values);
+                    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                    console.log('TIF Data Statistics:');
+                    console.log('Min value:', min);
+                    console.log('Max value:', max);
+                    console.log('Average value:', avg);
+                    console.log('Total pixels:', values.length);
+                    console.log('Sample values:', values.slice(0, 10));
+                }
+            }
+            
+            // Get the selected country's geometry for masking
+            let countryGeometry = null;
+            if (this.currentCountry && this.geojsonLayer) {
+                this.geojsonLayer.eachLayer((layer) => {
+                    if (layer.feature && layer.feature.properties.name === this.currentCountry) {
+                        countryGeometry = layer.feature.geometry;
+                    }
+                });
+            }
+            
+            // Create the visualization layer with country masking
+            const layer = new GeoRasterLayer({
+                attribution: "TIF Data",
+                georaster: georaster,
+                resolution: 128,
+                opacity: 0.8,
+                mask: countryGeometry, // Use country boundary as mask
+                resampleMethod: "bilinear",
+                pixelValuesToColorFn: (values) => {
+                    // Debug: Log more values to see what's being processed
+                    if (Math.random() < 0.01) { // Log 1% of values to see more data
+                        console.log('Sample TIF value:', values[0], 'Type:', typeof values[0]);
+                    }
+                    
+                    // Scale the values: multiply by 1000 to convert 0-1 range to 0-1000 range
+                    const scaledValue = values[0] * 1000;
+                    
+                    // Color function for groundnut production data using scaled concentration values
+                    if (scaledValue > 0 && scaledValue < 500) {
+                        return '#f70f0c';
+                    }
+                    else if (scaledValue >= 500 && scaledValue < 1000) {
+                        return "#e9f610";
+                    }
+                    else if (scaledValue >= 1000 && scaledValue < 2000) {
+                        return "#cff610";
+                    }
+                    else if (scaledValue >= 2000 && scaledValue < 4000) {
+                        return "#afef53";
+                    }
+                    else if (scaledValue >= 4000 && scaledValue < 6000) {
+                        return "#14ba10";
+                    }
+                    else if (scaledValue >= 6000 && scaledValue < 9000) {
+                        return "#01856a";
+                    }
+                    else if (scaledValue >= 9000) {
+                        return "#792635";
+                    }
+                    else {
+                        // Log any values that don't match our ranges
+                        if (values[0] > 0) {
+                            console.log('Unmatched positive value:', values[0], 'Scaled:', scaledValue);
+                        }
+                        return 'transparent';
+                    }
+                }
+            });
+            
+            // Add to map
+            this.currentTifLayer = layer;
+            layer.addTo(this.map);
+            
+            // Create legend for the TIF data
+            this.createTifLegend();
+            
+            // Fit map to show the country bounds, not the entire TIF
+            if (this.currentCountry && this.geojsonLayer) {
+                this.geojsonLayer.eachLayer((layer) => {
+                    if (layer.feature && layer.feature.properties.name === this.currentCountry) {
+                        const bounds = layer.getBounds();
+                        this.map.fitBounds(bounds, {
+                            padding: [20, 20],
+                            maxZoom: 8,
+                            animate: true
+                        });
+                    }
+                });
+            }
+            
+            this.updateStatus('TIF file loaded successfully with country masking!', 'success');
+            visualizeBtn.textContent = 'Visualize TIF';
+            visualizeBtn.disabled = false;
+            
+        } catch (error) {
+            console.error('Error loading TIF file:', error);
+            this.updateStatus(`Error loading TIF: ${error.message}`, 'error');
+            visualizeBtn.textContent = 'Visualize TIF';
+            visualizeBtn.disabled = false;
+        }
+    }
+
+    /**
+     * Clear current TIF layer
+     */
+    clearCurrentTifLayer() {
+        if (this.currentTifLayer) {
+            this.map.removeLayer(this.currentTifLayer);
+            this.currentTifLayer = null;
+        }
+        
+        // Remove legend if it exists
+        if (this.currentLegend) {
+            this.map.removeControl(this.currentLegend);
+            this.currentLegend = null;
+        }
+    }
+
+    /**
+     * Create legend for TIF data
+     */
+    createTifLegend() {
+        // Remove existing legend
+        if (this.currentLegend) {
+            this.map.removeControl(this.currentLegend);
+        }
+
+        // Create legend control
+        this.currentLegend = L.control({ position: 'bottomright' });
+        
+        this.currentLegend.onAdd = (map) => {
+            const div = L.DomUtil.create('div', 'tif-legend');
+            div.style.cssText = `
+                background: rgba(255, 255, 255, 0.95);
+                padding: 8px;
+                border-radius: 6px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                max-width: 120px;
+                font-family: Arial, sans-serif;
+                font-size: 10px;
+                line-height: 1.2;
+            `;
+
+            // Title - much smaller
+            const title = document.createElement('div');
+            title.textContent = `Production (g/100m²)`;
+            title.style.cssText = `
+                margin: 0 0 6px 0;
+                font-size: 9px;
+                color: #2E5A3C;
+                text-align: center;
+                font-weight: bold;
+            `;
+            div.appendChild(title);
+
+            // Color scale - compact layout
+            const ranges = [
+                { color: "#f70f0c", label: "0-500" },
+                { color: "#e9f610", label: "500-1k" },
+                { color: "#cff610", label: "1k-2k" },
+                { color: "#afef53", label: "2k-4k" },
+                { color: "#14ba10", label: "4k-6k" },
+                { color: "#01856a", label: "6k-9k" },
+                { color: "#792635", label: ">9k" }
+            ];
+            
+            ranges.forEach(range => {
+                const item = document.createElement('div');
+                item.style.cssText = `
+                    display: flex;
+                    align-items: center;
+                    margin: 2px 0;
+                    font-size: 9px;
+                `;
+                
+                const colorBox = document.createElement('span');
+                colorBox.style.cssText = `
+                    display: inline-block;
+                    width: 12px;
+                    height: 12px;
+                    background: ${range.color};
+                    margin-right: 6px;
+                    border-radius: 2px;
+                    border: 1px solid #ccc;
+                    flex-shrink: 0;
+                `;
+                
+                const label = document.createElement('span');
+                label.textContent = range.label;
+                label.style.color = '#555';
+                label.style.fontSize = '9px';
+                
+                item.appendChild(colorBox);
+                item.appendChild(label);
+                div.appendChild(item);
+            });
+            
+            return div;
+        };
+        
+        this.currentLegend.addTo(this.map);
+        console.log('✅ Compact TIF legend created');
+    }
+
+    /**
+     * Debug TIF data to check values and ranges
+     */
+    debugTifData() {
+        if (!this.currentTifLayer) {
+            this.updateStatus('No TIF data loaded. Please visualize a TIF file first.', 'warning');
+            return;
+        }
+
+        try {
+            // Get the georaster data from the current layer
+            const georaster = this.currentTifLayer.georaster;
+            if (georaster && georaster.values) {
+                const values = georaster.values[0]; // First band
+                if (values && values.length > 0) {
+                    const min = Math.min(...values);
+                    const max = Math.max(...values);
+                    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                    
+                    // Count values in each range
+                    const ranges = {
+                        '0-500': 0,
+                        '500-1000': 0,
+                        '1000-2000': 0,
+                        '2000-4000': 0,
+                        '4000-6000': 0,
+                        '6000-9000': 0,
+                        '>9000': 0
+                    };
+                    
+                    values.forEach(val => {
+                        const scaledVal = val * 1000; // Scale to match our color ranges
+                        if (scaledVal > 0 && scaledVal < 500) ranges['0-500']++;
+                        else if (scaledVal >= 500 && scaledVal < 1000) ranges['500-1000']++;
+                        else if (scaledVal >= 1000 && scaledVal < 2000) ranges['1000-2000']++;
+                        else if (scaledVal >= 2000 && scaledVal < 4000) ranges['2000-4000']++;
+                        else if (scaledVal >= 4000 && scaledVal < 6000) ranges['4000-6000']++;
+                        else if (scaledVal >= 6000 && scaledVal < 9000) ranges['6000-9000']++;
+                        else if (scaledVal >= 9000) ranges['>9000']++;
+                    });
+                    
+                    console.log('=== TIF DATA DEBUG ===');
+                    console.log('Min value:', min);
+                    console.log('Max value:', max);
+                    console.log('Average value:', avg);
+                    console.log('Total pixels:', values.length);
+                    console.log('Value distribution by range:');
+                    Object.entries(ranges).forEach(([range, count]) => {
+                        console.log(`${range}: ${count} pixels (${((count/values.length)*100).toFixed(2)}%)`);
+                    });
+                    console.log('Sample values:', values.slice(0, 20));
+                    
+                    // Show summary in status
+                    this.updateStatus(`TIF Debug: Min=${min}, Max=${max}, Avg=${avg.toFixed(2)}`, 'info');
+                }
+            }
+        } catch (error) {
+            console.error('Error debugging TIF data:', error);
+            this.updateStatus('Error debugging TIF data', 'error');
+        }
+    }
+
+    /**
+     * Setup event listeners
+     */
+    setupEventListeners() {
+        // Country selection
+        document.getElementById('countrySelect').addEventListener('change', (e) => {
+            // Add a small delay to ensure GeoJSON layer is ready
+            setTimeout(() => {
+                this.selectCountry(e.target.value);
+            }, 100);
+        });
+
+        // Layer selection
+        document.getElementById('layerSelect').addEventListener('change', (e) => {
+            this.changeMapLayer(e.target.value);
+        });
+
+        // TIF URL input change
+        document.getElementById('tifUrlInput').addEventListener('input', (e) => {
+            const visualizeBtn = document.getElementById('visualizeBtn');
+            if (visualizeBtn) {
+                visualizeBtn.disabled = !e.target.value.trim();
+            }
+        });
+
+        // Visualize TIF button
+        document.getElementById('visualizeBtn').addEventListener('click', () => {
+            this.loadTifFile();
+        });
+
+        // Debug TIF button
+        document.getElementById('debugTifBtn').addEventListener('click', () => {
+            this.debugTifData();
+        });
+
+        // Reset view button
+        document.getElementById('resetView').addEventListener('click', () => {
+            this.resetMapView();
+        });
+
+        // Clear selection button
+        document.getElementById('clearSelection').addEventListener('click', () => {
+            this.clearSelection();
+        });
+
+        // Show all countries button
+        document.getElementById('showAllCountries').addEventListener('click', () => {
+            this.showAllCountries();
+        });
+
+        // Clear TIF button
+        document.getElementById('clearTif').addEventListener('click', () => {
+            this.clearCurrentTifLayer();
+            this.updateStatus('TIF layer cleared', 'info');
+        });
+
+        console.log('🎯 Event listeners setup complete');
+    }
+
+    /**
+     * Select country from dropdown
+     */
+    selectCountry(countryName) {
+        if (!countryName) return;
+
+        // Deselect previously selected country
+        this.deselectAllCountries();
+
+        const country = this.countryData[countryName];
+        if (country && this.isGeoJSONReady()) {
+            // Find and highlight the country layer
+            this.geojsonLayer.eachLayer((layer) => {
+                if (layer.feature && layer.feature.properties.name === countryName) {
+                    this.selectCountryOnMap(layer, countryName);
+                }
+            });
+
+            // Use improved zooming method
+            this.zoomToCountry(countryName);
+            this.currentCountry = countryName;
+            
+            // Update TIF URL input
+            this.updateTifUrlInput(countryName);
+        } else if (country) {
+            // GeoJSON not ready yet, just zoom to country
+            this.map.setView(country.coordinates, country.zoom);
+            this.currentCountry = countryName;
+            this.updateStatus(`Selected ${countryName} (boundaries not ready yet)`, 'warning');
+            
+            // Update TIF URL input
+            this.updateTifUrlInput(countryName);
+        }
+    }
+
+    /**
+     * Update country dropdown selection
+     */
+    updateCountryDropdown(countryName) {
+        const dropdown = document.getElementById('countrySelect');
+        if (dropdown) {
+            dropdown.value = countryName;
+        }
+        
+        // Update selected country info display
+        this.updateSelectedCountryInfo(countryName);
+    }
+
+    /**
+     * Update selected country info display
+     */
+    updateSelectedCountryInfo(countryName) {
+        const selectedInfo = document.getElementById('selectedCountryInfo');
+        const selectedName = document.getElementById('selectedCountryName');
+        
+        if (selectedInfo && selectedName) {
+            if (countryName) {
+                selectedName.textContent = countryName;
+                selectedInfo.style.display = 'block';
+            } else {
+                selectedInfo.style.display = 'none';
+            }
+        }
+    }
+
+    /**
+     * Check if GeoJSON layer is ready
+     */
+    isGeoJSONReady() {
+        return this.geojsonLayer && this.geojsonLayer.getLayers && this.geojsonLayer.getLayers().length > 0;
+    }
+
+    /**
+     * Change map layer
+     */
+    changeMapLayer(layerType) {
+        // Remove current layer
+        Object.values(this.tileLayers).forEach(layer => {
+            this.map.removeLayer(layer);
+        });
+
+        // Add new layer
+        if (this.tileLayers[layerType]) {
+            this.tileLayers[layerType].addTo(this.map);
+            this.updateStatus(`Switched to ${layerType} layer`, 'info');
+        }
+    }
+
+    /**
+     * Reset map view
+     */
+    resetMapView() {
+        this.map.setView([0, 20], 4);
+        
+        // Clear country selection
+        this.deselectAllCountries();
+        
+        // Reset all countries to invisible state
+        if (this.geojsonLayer) {
+            this.geojsonLayer.eachLayer((layer) => {
+                layer.setStyle({
+                    fillColor: 'transparent',
+                    weight: 0,
+                    opacity: 0,
+                    color: 'transparent',
+                    fillOpacity: 0
+                });
+            });
+        }
+        
+        // Reset dropdown
+        this.updateCountryDropdown('');
+        
+        // Clear TIF URL input
+        const tifUrlInput = document.getElementById('tifUrlInput');
+        if (tifUrlInput) {
+            tifUrlInput.value = '';
+            tifUrlInput.placeholder = 'Enter TIF file URL...';
+        }
+        
+        // Disable visualize button
+        const visualizeBtn = document.getElementById('visualizeBtn');
+        if (visualizeBtn) {
+            visualizeBtn.disabled = true;
+        }
+        
+        this.updateStatus('Map view reset', 'info');
+    }
+
+    /**
+     * Clear country selection
+     */
+    clearSelection() {
+        this.deselectAllCountries();
+        this.updateCountryDropdown('');
+        this.updateStatus('Country selection cleared', 'info');
+    }
+
+    /**
+     * Show all countries with basic styling
+     */
+    showAllCountries() {
+        if (this.geojsonLayer) {
+            this.geojsonLayer.eachLayer((layer) => {
+                layer.setStyle({
+                    weight: 1,
+                    color: '#333',
+                    fillColor: '#667eea',
+                    fillOpacity: 0.1
+                });
+            });
+            this.updateStatus('Showing all country boundaries', 'success');
+        }
+    }
+
+    /**
+     * Update status bar
+     */
+    updateStatus(message, type = 'info') {
+        const statusBar = document.getElementById('statusBar');
+        statusBar.textContent = message;
+        
+        // Remove existing classes
+        statusBar.className = 'status-bar';
+        
+        // Add type-specific styling
+        if (type === 'error') {
+            statusBar.style.background = 'rgba(220, 53, 69, 0.9)';
+        } else if (type === 'success') {
+            statusBar.style.background = 'rgba(40, 167, 69, 0.9)';
+        } else if (type === 'warning') {
+            statusBar.style.background = 'rgba(255, 193, 7, 0.9)';
+        } else {
+            statusBar.style.background = 'rgba(0, 0, 0, 0.8)';
+        }
+    }
+
+    /**
+     * Update boundary status in control panel
+     */
+    updateBoundaryStatus(message, type = 'info') {
+        const boundaryStatus = document.getElementById('boundaryStatus');
+        if (boundaryStatus) {
+            boundaryStatus.textContent = message;
+            
+            // Update color based on type
+            if (type === 'error') {
+                boundaryStatus.style.color = '#dc3545';
+            } else if (type === 'success') {
+                boundaryStatus.style.color = '#28a745';
+            } else if (type === 'warning') {
+                boundaryStatus.style.color = '#ffc107';
+            } else {
+                boundaryStatus.style.color = '#17a2b8';
+            }
+        }
+    }
+}
+
+/**
+ * Global function to close country info modal
+ */
+function closeCountryInfo() {
+    document.getElementById('countryInfo').style.display = 'none';
+}
+
+// Initialize the application when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.africaMap = new AfricaBoundariesMap();
+});
+
+console.log('🚀 Africa Boundaries Map application loaded');
+
+    </script>
+</body>
+</html>

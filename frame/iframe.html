@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Africa TIF Iframe Visualizer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    .status {
+      position: absolute; bottom: 12px; left: 12px; z-index: 9999;
+      background: rgba(0,0,0,.8); color: #fff; padding: 8px 12px;
+      border-radius: 14px; font: 12px/1.2 system-ui;
+    }
+    .legend {
+      position: absolute; right: 6px; bottom: 6px; z-index: 9999;
+      background: rgba(255,255,255,0.95); padding: 4px; border-radius: 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.15); font: 8px/1.1 system-ui;
+      max-width: 90px;
+    }
+    .legend h4 { margin: 0 0 3px 0; font-size: 8px; }
+    .legend-row { display: flex; align-items: center; gap: 3px; margin: 2px 0; }
+    .legend-swatch { width: 10px; height: 10px; border-radius: 1px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="status" id="status">Initializing…</div>
+  <div class="legend" id="legend" style="display:none;"></div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/proj4"></script>
+  <script src="https://unpkg.com/geotiff"></script>
+  <script src="https://unpkg.com/georaster"></script>
+  <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
+
+  <script>
+    // -------- query params --------
+    const qs = new URLSearchParams(window.location.search);
+    const COUNTRY = (qs.get('country') || '').trim();
+    const TIF_URL = (qs.get('tif') || '').trim();
+    const TITLE = (qs.get('title') || '').trim();
+    const IS_COG = qs.get('is_cog') === '1' || qs.get('is_cog') === 'true'; // Crop mapping vs Forecast
+    const RES = Math.max(8, Math.min(2048, Number(qs.get('res')) || 256)); // tweak via ?res=512 etc.
+
+    const statusEl = document.getElementById('status');
+    const legendEl = document.getElementById('legend');
+
+    function setStatus(msg, level = "info") {
+      statusEl.textContent = msg;
+      statusEl.style.background =
+        level === "error" ? "rgba(220,53,69,.95)" :
+        level === "warn"  ? "rgba(255,193,7,.95)" :
+                            "rgba(0,0,0,.85)";
+      // notify parent page (optional)
+      try { parent.postMessage({ type: "tif-iframe-status", level, text: msg }, "*"); } catch {}
+    }
+
+    function countryMatches(name, target) {
+      return (name || '').toLowerCase() === (target || '').toLowerCase();
+    }
+
+    // -------- map --------
+    const map = L.map('map', { zoomControl: true }).setView([0, 20], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+    L.control.scale({ imperial: false }).addTo(map);
+
+    let countriesLayer = null;
+    let tifLayer = null;
+
+    function clearTif() {
+      if (tifLayer) { map.removeLayer(tifLayer); tifLayer = null; }
+    }
+
+    async function loadBoundaries() {
+      setStatus('Loading country boundaries…');
+      const res = await fetch('./africa.geojson'); // must be alongside this file
+      if (!res.ok) throw new Error(`africa.geojson HTTP ${res.status}`);
+      const gj = await res.json();
+      countriesLayer = L.geoJSON(gj, {
+        style: { weight: 1, color: '#333', fillColor: '#667eea', fillOpacity: 0.08 }
+      }).addTo(map);
+      return gj;
+    }
+
+    function findCountryFeature(geojson, name) {
+      const features = geojson.features || [];
+      const feat = features.find(f => {
+        const props = f.properties || {};
+        const n = props.name || props.ADMIN || props.Country || '';
+        return countryMatches(n, name);
+      });
+      if (!feat) throw new Error(`Country "${name}" not found in africa.geojson`);
+      return feat;
+    }
+
+    function fitToFeature(feature) {
+      const tmp = L.geoJSON(feature);
+      const bounds = tmp.getBounds();
+      map.fitBounds(bounds, { padding: [20, 20], maxZoom: 8 });
+    }
+
+    function renderLegend(country) {
+      if (IS_COG) {
+        // Crop Mapping: Show discrete legend
+        const rows = [
+          { c: "#f70f0c", t: "0-500" },
+          { c: "#e9f610", t: "500-1k" },
+          { c: "#cff610", t: "1k-2k" },
+          { c: "#afef53", t: "2k-4k" },
+          { c: "#14ba10", t: "4k-6k" },
+          { c: "#01856a", t: "6k-9k" },
+          { c: "#792635", t: ">9k" }
+        ];
+        legendEl.innerHTML = '';
+        const h = document.createElement('h4');
+        h.textContent = TITLE || `Production (g/100m²)`;
+        legendEl.appendChild(h);
+        rows.forEach(r => {
+          const row = document.createElement('div'); row.className = 'legend-row';
+          const sw = document.createElement('div'); sw.className = 'legend-swatch'; sw.style.background = r.c;
+          const lab = document.createElement('div'); lab.textContent = r.t; lab.style.fontSize = '8px';
+          row.appendChild(sw); row.appendChild(lab);
+          legendEl.appendChild(row);
+        });
+        legendEl.style.display = 'block';
+        L.DomEvent.disableClickPropagation(legendEl);
+      } else {
+        // Forecast: Hide discrete legend, will show scale bar instead
+        legendEl.style.display = 'none';
+      }
+    }
+
+    function createColorBar(scale, range, options = {}) {
+      const {
+        title = 'Scale',
+        units = '',
+        steps = 100,
+        decimals = 1,
+        width = 350,
+        height = 20,
+        position = 'bottomright',
+        background = '#000',
+        textColor = 'white',
+        labels = [0, 0.5, 1.0, 1.5, 2.0],
+        labelFontSize = 9
+      } = options;
+
+      const control = L.control({ position });
+      
+      control.onAdd = function(map) {
+        const div = L.DomUtil.create('div', 'colorbar-control');
+        div.style.cssText = `
+          background: ${background};
+          color: ${textColor};
+          padding: 8px;
+          border-radius: 4px;
+          font-family: Arial, sans-serif;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        `;
+
+        // Title
+        const titleEl = document.createElement('div');
+        titleEl.textContent = title + (units ? ` (${units})` : '');
+        titleEl.style.cssText = `
+          font-size: 10px;
+          font-weight: bold;
+          margin-bottom: 4px;
+          text-align: center;
+        `;
+        div.appendChild(titleEl);
+
+        // Color bar
+        const barContainer = document.createElement('div');
+        barContainer.style.cssText = `
+          width: ${width}px;
+          height: ${height}px;
+          background: linear-gradient(to right, #f70f0c, #e9f610, #cff610, #afef53, #14ba10, #01856a, #792635);
+          border: 1px solid #ccc;
+          border-radius: 2px;
+          margin-bottom: 4px;
+        `;
+        div.appendChild(barContainer);
+
+        // Labels
+        const labelsContainer = document.createElement('div');
+        labelsContainer.style.cssText = `
+          display: flex;
+          justify-content: space-between;
+          font-size: ${labelFontSize}px;
+          width: ${width}px;
+        `;
+        
+        labels.forEach(label => {
+          const labelEl = document.createElement('span');
+          labelEl.textContent = label.toFixed(decimals);
+          labelEl.style.color = textColor;
+          labelsContainer.appendChild(labelEl);
+        });
+        
+        div.appendChild(labelsContainer);
+        return div;
+      };
+
+      return control;
+    }
+
+    async function loadTifForCountry(feature, tifUrl) {
+      setStatus('Fetching TIF…');
+      const georaster = await parseGeoraster(tifUrl); // requires CORS on TIF host
+      setStatus('Rendering…');
+
+      // collect declared NoData markers (some files have arrays)
+      const noDataCandidates = []
+        .concat(georaster.noDataValue ?? [])
+        .concat(georaster.noDataValues ?? []);
+      const hasNoData = noDataCandidates.length > 0;
+
+      const isNoData = (x) => {
+        if (x == null || !isFinite(x) || isNaN(x)) return true;
+        if (!hasNoData) return false;
+        return noDataCandidates.some(nd => Math.abs(x - nd) < 1e-9);
+      };
+
+      const layer = new GeoRasterLayer({
+        georaster,
+        opacity: 0.85,
+        resolution: RES,              // increase for lighter memory
+        resampleMethod: 'bilinear',
+        updateWhenIdle: true,
+        mask: feature.geometry,       // clip rendering to the country
+        pixelValuesToColorFn: (vals) => {
+          const raw = vals?.[0];
+
+          // >>> FIX: make NoData and <= 0 transparent
+          if (isNoData(raw) || raw <= 0) return 'transparent';
+
+          // scale (your original scheme used v*1000)
+          const v = raw * 1000;
+
+          if (v > 0 && v < 500)   return '#f70f0c';
+          if (v < 1000)           return '#e9f610';
+          if (v < 2000)           return '#cff610';
+          if (v < 4000)           return '#afef53';
+          if (v < 6000)           return '#14ba10';
+          if (v < 9000)           return '#01856a';
+          if (v >= 9000)          return '#792635';
+          return 'transparent';
+        }
+      });
+
+      clearTif();
+      tifLayer = layer.addTo(map);
+      
+      // Add appropriate visualization control based on type
+      if (IS_COG) {
+        // Crop Mapping: Legend already handled in renderLegend()
+        setStatus('Crop mapping loaded', 'success');
+      } else {
+        // Forecast: Add color bar instead of legend
+        const colorBar = createColorBar(null, null, {
+          title: TITLE || 'Forecast Scale',
+          units: 'units',
+          width: 300,
+          height: 18,
+          position: 'bottomright',
+          background: '#000',
+          textColor: 'white',
+          labels: [0, 0.5, 1.0, 1.5, 2.0],
+          labelFontSize: 8
+        });
+        colorBar.addTo(map);
+        setStatus('Forecast loaded with scale bar', 'success');
+      }
+    }
+
+    (async function main() {
+      try {
+        if (!COUNTRY || !TIF_URL) {
+          setStatus('Missing params. Use ?country=Senegal&tif=https%3A%2F%2F…', 'warn');
+        }
+        const gj = await loadBoundaries();
+
+        if (COUNTRY) {
+          const cf = findCountryFeature(gj, COUNTRY);
+
+          // de-emphasize all and highlight selected country outline
+          if (countriesLayer) {
+            countriesLayer.setStyle({ weight: 1, color: '#333', fillColor: '#667eea', fillOpacity: 0.05 });
+            L.geoJSON(cf, {
+              style: { weight: 3, color: '#667eea', dashArray: '8,4', fillColor: '#667eea', fillOpacity: 0.15 }
+            }).addTo(map);
+          }
+
+          fitToFeature(cf);
+          renderLegend(COUNTRY);
+
+          if (TIF_URL) {
+            await loadTifForCountry(cf, TIF_URL);
+          } else {
+            setStatus('Add &tif=<url-encoded-tif> to visualize.', 'warn');
+          }
+        } else {
+          setStatus('Add &country=Senegal in the URL.', 'warn');
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus(err?.message || 'Unexpected error', 'error');
+      }
+    })();
+  </script>
+</body>
+</html>
